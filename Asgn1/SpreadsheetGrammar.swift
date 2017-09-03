@@ -20,7 +20,6 @@ var contents : Array<String> = Array()
 var value : Array<Int> = Array()
 
 extension String {
-    
     // Removes whitespaces from a string and returns the new string
     func removeWhiteSpace() -> String {
         return components(separatedBy: .whitespaces).joined()
@@ -32,8 +31,36 @@ extension String {
     }
 }
 
+func calcValue(input: String) ->  Int{
+    var total = 0
+    if input.matches("([0-9]+)[+]([0-9]+)") {
+        let expr : [String] = input.components(separatedBy: "+")
+         
+         for e in expr {
+         total += Int(e)!
+         }
+        return total
+    }
+    else if input.matches("([0-9]+)[*]([0-9]+)") {
+        if total == 0 {
+            total = 1
+        }
+        let expr : [String] = input.components(separatedBy: "*")
+         for e in expr {
+         total *= Int(e)!
+         }
+        return total
+    }
+    else if input.matches("[0-9]") {
+        return Int(input)!
+    }
+    return Int(input)!
+
+}
+
+
 /**
-// Isn't used at the moment. 
+// Isn't used at the moment.
 // Returns the contents of the cell that we are searching for
 func findCell(cell: String) -> String {
     return cells[cell]!
@@ -74,25 +101,34 @@ class GRSpreadsheet : GrammarRule {
 
 // Used to input the expression. This is what will be assigned to a cell
 class GRExpression : GrammarRule {
-    let myNum = GRInteger()
     let myProdTerm = GRProductTerm()
     let exprTail = GRExpressionTail()
     let quotedString = GRQuotedString()
 
     init(){
-        super.init(rhsRules: [[myNum,exprTail], [myProdTerm,exprTail], [quotedString]])
+        super.init(rhsRules: [[myProdTerm,exprTail], [quotedString]])
     }
     
     override func parse(input: String) -> String? {
-        let trimmedInput = input.removeWhiteSpace()
-        let rest = super.parse(input:trimmedInput)
+        let rest = super.parse(input: input)
         
-        //if let str = trimmedInput as? [String] {
+        // Calls down through the classes ProdTerm -> Value to get the integer value and
+        // brings it back up
+        let prodTermValue = myProdTerm.calculatedValue
+        
+        //print("profterm:",prodTermValue)
+        //print("exprtail:",exprTail.calculatedValue)
         
         if rest != nil {
-            self.calculatedValue = myNum.calculatedValue! + exprTail.calculatedValue!
+            if prodTermValue != nil && exprTail.calculatedValue != nil {
+                self.calculatedValue = prodTermValue! + exprTail.calculatedValue!
+            }
+            else if prodTermValue != nil && exprTail.calculatedValue == nil {
+                self.calculatedValue = prodTermValue
+            }
+            return rest
         }
-        return rest
+        return nil
     }
 }
 
@@ -100,33 +136,37 @@ class GRExpression : GrammarRule {
 // The remainder of the expression. Is recursive so it'll take in multiple values and operators
 class GRExpressionTail : GrammarRule {
     let plus = GRLiteral(literal: "+")
-    let myValue = GRValue()
-    let myNum = GRInteger()
+    let myProdTerm = GRProductTerm()
     var total = ""
     
     init(){
-        super.init(rhsRules: [[plus,myValue], [Epsilon.theEpsilon]])
+        super.init(rhsRules: [[plus,myProdTerm], [Epsilon.theEpsilon]])
     }
     
     override func parse(input: String) -> String? {
+       
         if let rest = super.parse(input: input) {
-            // if the value of num is nil then return nil
-            if(self.myValue.num.calculatedValue == nil) {
-                return nil
+            
+            let prodTerm = myProdTerm.myValue.myInt.calculatedValue
+            
+            if rest == input {
+                return rest
             }
+            
             // recursively calls the class until there is no more input to call on
             let tail = GRExpressionTail()
             
             // if tail has a value then add that to the total
-            if(tail.parse(input: rest) == nil) {
-                self.calculatedValue = myValue.num.calculatedValue!
-            
+            if tail.parse(input: rest) == nil {
+                self.calculatedValue = prodTerm!
             }
             else {
                 total = tail.parse(input: rest)!
                 
-                if(tail.calculatedValue != nil) {
-                    self.calculatedValue = myValue.num.calculatedValue! + tail.calculatedValue!
+                if tail.calculatedValue != nil {
+                    self.calculatedValue = prodTerm! + tail.calculatedValue!
+                } else {
+                    self.calculatedValue = prodTerm!
                 }
             }
             return total
@@ -137,19 +177,26 @@ class GRExpressionTail : GrammarRule {
 
 /// Parses the first value in the input and calls ProductTermTail on the rest of the input
 class GRProductTerm : GrammarRule {
-    let myNum = GRValue()
+    let myValue = GRValue()
     let myProdTermTail = GRProductTermTail()
     
     init(){
-        super.init(rhsRule: [myNum, myProdTermTail])
+        super.init(rhsRule: [myValue, myProdTermTail])
     }
     
     override func parse(input: String) -> String? {
-        let trimmedInput = input.removeWhiteSpace()
-        let rest = super.parse(input: trimmedInput)
         
-        if (rest != nil) {
-            self.calculatedValue = myNum.num.calculatedValue! * myProdTermTail.calculatedValue!
+        let rest = super.parse(input: input.removeWhiteSpace())
+        
+        
+        // Created the variable so I didn't have to type it out all the time
+        let value = myValue.myInt.calculatedValue
+        
+        if value != nil && myProdTermTail.calculatedValue != nil {
+            self.calculatedValue = value! * myProdTermTail.calculatedValue!
+        }
+        else if value != nil && myProdTermTail.calculatedValue == nil {
+            self.calculatedValue = value!
         }
         return rest
     }
@@ -167,24 +214,30 @@ class GRProductTermTail : GrammarRule {
     }
     
     override func parse(input: String) -> String? {
+        
         if let rest = super.parse(input: input) {
-            // if value of num is nil then return nil
-            if(self.myValue.num.calculatedValue == nil) {
-                return nil
+            
+            let val = myValue.myInt.calculatedValue
+            
+            
+            if(rest == input) {
+                return input
             }
             // Recursively calls the class until there is no more input
             let tail = GRProductTermTail()
             
             // if tail has a value then add that to the total
             if(tail.parse(input: rest) == nil) {
-                self.calculatedValue =  myValue.num.calculatedValue!
+                self.calculatedValue =  val!
                 return rest
             }
             else {
                 total = tail.parse(input: rest)!
                 
                 if(tail.calculatedValue != nil) {
-                    self.calculatedValue = self.myValue.num.calculatedValue! * tail.calculatedValue!
+                    self.calculatedValue = val! * tail.calculatedValue!
+                }else{
+                    self.calculatedValue = val!
                 }
             }
             return total
@@ -205,15 +258,10 @@ class GRAssignment: GrammarRule {
     }
     
     override func parse(input: String) -> String? {
-        //print("gets here")
         if let rest = super.parse(input: input) {
             
-            //print("entered loop")
-            // Removes whitespace from the input
-            let trimmedInput = input.removeWhiteSpace()
-            
             // Splits the input into halves either side of the ":="
-            let inputSplit : [String] = trimmedInput.components(separatedBy: ":=")
+            let inputSplit : [String] = input.removeWhiteSpace().components(separatedBy: ":=")
            
             
             cell.append(inputSplit[0])
@@ -261,6 +309,7 @@ class GRRelativeCell : GrammarRule {
         return nil
     }
 } **/
+
 /// Returns the specified relative cell of the current cell
 class GRRelativeCell : GrammarRule {
     let myRow = GRLiteral(literal: "r")
@@ -274,9 +323,18 @@ class GRRelativeCell : GrammarRule {
     
     override func parse(input: String) -> String? {
         if let rest = super.parse(input: input) {
-            _ = findRelCell(input: input)
+            //_ = findRelCell(input: input)
             
-            return rest
+            let pattern = "[\"r\"]([0-9]+)[\"c\"]([0-9]+)"
+            
+            let parts : [String] = input.removeWhiteSpace().components(separatedBy: "+")
+            
+            for part in parts {
+                if part.matches(pattern) {
+                    let relCell = part
+                    return relCell
+                }
+            }
         }
         return nil
     }
@@ -303,26 +361,35 @@ class GRPrint : GrammarRule {
                 // If else statement that covers the print_expr and print_value input.
                 // Prints the expression that is in the cell
                 if(parts[0] == "print_expr") {
-                    print("Expression in cell ", parts[1], "is ", contents[index])
+                    print("Expression in cell", parts[1], "is", contents[index])
                 }
                 // Prints the value in the cell
                 else if(parts[0] == "print_value") {
-                    
                     //Checks for a plus (+) or a multiply (*) and applies the right calculations
+                    
+                    
                     if contents[index].matches("([0-9]+)[+]([0-9]+)") {
                         let expr : [String] = contents[index].components(separatedBy: "+")
-                        for e in expr {
+                        
+                            for e in expr {
                             total += Int(e)!
                         }
-                        print("Value of cell ", parts[1], "is ", total)
+                        value[index] = total
+                        print("Value of cell", parts[1], "is", value[index])
                     }
                     else if contents[index].matches("([0-9]+)[*]([0-9]+)") {
-                        total = 1
+                        if total == 0 {
+                            total = 1
+                        }
                         let expr : [String] = contents[index].components(separatedBy: "*")
-                        for e in expr {
+                            for e in expr {
                             total *= Int(e)!
                         }
-                        print("Value of cell ", parts[1], "is ", total)
+                        value[index] = total
+                        print("Value of cell", parts[1], "is", value[index])
+                    }
+                    else if contents[index].matches("[0-9]") {
+                        print("Value of cell", parts[1], "is", value[index])
                     }
                 }
             }
@@ -340,25 +407,43 @@ class GRQuotedString : GrammarRule {
     init(){
         super.init(rhsRule: [quote, string, quote])
     }
+    
     override func parse(input: String) -> String? {
-        
-        if input.matches("[\"][a-zA-z][\"]") {
+        if input.matches("[\"]([a-zA-Z]+)[\"]") {
             return input
         }
         else {
             return nil
         }
+ 
     }
 }
 
 /// Either a cellReference or a number representing the value
 class GRValue : GrammarRule {
     let cellRef = GRCellReference()
-    let num = GRInteger()
+    let myInt = GRInteger()
     
     init() {
-        super.init(rhsRules: [[cellRef], [num]])
+        super.init(rhsRules: [[cellRef], [myInt]])
     }
+    
+    func retInt(myInt: GRInteger) -> GRInteger {
+        return myInt
+    }
+
+    override func parse(input: String) -> String? {
+        if let rest = super.parse(input: input) {
+            //print("myint:",myInt.calculatedValue)
+            //print("rest:",rest)
+            if myInt.calculatedValue != nil {
+                return rest
+            }
+            
+        }
+        return nil
+    }
+    
 }
 
 /// Represents either the absolute or the relative cell 

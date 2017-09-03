@@ -71,21 +71,26 @@ if CommandLine.arguments.count>1 {
     print(" ")
     print("--- Test GRExpression parsing")
     let myExpr = GRExpression()
-    testGrammarRule(rule: myExpr, input: " 1+ 2 ")
-    if let result = myExpr.parse(input: " 1 + 2 ") {
+    testGrammarRule(rule: myExpr, input: " 1* 2 ")
+    if let result = myExpr.parse(input: " 1 * 2 ") {
         print("myExpr.calculatedValue is \(myExpr.calculatedValue!)")
     }
-    testGrammarRule(rule: myExpr, input: "10+14+2+6")
-    if let result = myExpr.parse(input: "10+14+2+6") {
+    testGrammarRule(rule: myExpr, input: "10+10*2+6")
+    if let result = myExpr.parse(input: "10+10*2+6") {
         print("myExpr.calculatedValue is \(myExpr.calculatedValue!)")
     }
+    testGrammarRule(rule: myExpr, input: " 1 ")
+    if let result = myExpr.parse(input: " 1") {
+        print("myExpr.calculatedValue is \(myExpr.calculatedValue!)")
+    }
+
     
     print(" ")
     print("--- Test GRSpreadsheet parsing")
     let mySpreadsheet = GRSpreadsheet()
     testGrammarRule(rule: mySpreadsheet, input: " 1+ 3 ")
     testGrammarRule(rule: mySpreadsheet, input: "An epsilon GRSpreadsheet match")
-    testGrammarRule(rule: mySpreadsheet, input: "1+2+3+")
+    testGrammarRule(rule: mySpreadsheet, input: "1+2+3")
     
     print(" ")
     print("--- Test GRAssignment parsing")
@@ -124,8 +129,17 @@ if CommandLine.arguments.count>1 {
     let p = GRPrint()
     testGrammarRule(rule: myAssign, input: "C5 := 4 + 2")
     testGrammarRule(rule: myAssign, input: "A5 := A1 + 2")
+    testGrammarRule(rule: myAssign, input: "A3 := 10 * 2")
     testGrammarRule(rule: p ,input: "print_value C5")
     testGrammarRule(rule: p ,input: "print_expr A5")
+    testGrammarRule(rule: p, input: "print_value A3")
+    
+    
+    print(" ")
+    print("----Test GRQuotedString")
+    let q = GRQuotedString()
+    testGrammarRule(rule: q, input: "covfefe")
+    testGrammarRule(rule: q, input: "my name is oiver")
     
     /**
     print(" ")
@@ -151,7 +165,6 @@ if CommandLine.arguments.count>1 {
     let spread = GRSpreadsheet()
     output(rule: spread, input: "A1 := 1")
     output(rule: spread, input: "A2 := \"covfefe\"")
-    output(rule: spread, input: "C5 := 3 + 1")
     output(rule: spread, input: "print_expr A1")
     output(rule: spread, input: "print_value A1")
     output(rule: spread, input: "print_expr A2")
